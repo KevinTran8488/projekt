@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Počasíčko</title>
+  <style>
+    /* Základní layout – stránka vycentrovaná, max šířka 400px */
+    body { font-family: sans-serif; max-width: 400px; margin: 60px auto; padding: 0 20px; }
+    h1 { font-size: 1.4rem; margin-bottom: 16px; }
+
+    /* Pole pro zadání města a tlačítko vedle sebe */
+    input { padding: 8px; width: 220px; border: 1px solid #ccc; border-radius: 6px; }
+    button { padding: 8px 14px; margin-left: 6px; cursor: pointer; border: 1px solid #ccc; border-radius: 6px; }
+
+    /* Stavová hláška – šedá při načítání, červená při chybě */
+    #status { margin-top: 10px; font-size: .9rem; color: gray; }
+    #status.error { color: red; }
+
+    /* Karta s výsledkem – schovaná dokud nepřijdou data */
+    #result { margin-top: 16px; border: 1px solid #ddd; border-radius: 10px; overflow: hidden; display: none; }
+
+    /* Horní modrá část karty – město, teplota, popis */
+    .top { background: #4a90d9; color: white; padding: 20px; }
+    .top h2 { margin: 0 0 4px; font-size: 1.3rem; }
+    .temp { font-size: 3rem; font-weight: bold; }
+    .desc { font-size: .9rem; opacity: .85; text-transform: capitalize; }
+
+    /* Spodní část karty – tři statistiky vedle sebe */
+    .stats { display: flex; justify-content: space-around; padding: 14px; background: #fff; }
+    .stat { text-align: center; font-size: .85rem; }
+    .stat span { display: block; font-weight: bold; font-size: 1rem; }
+  </style>
+</head>
+<body>
+
+  <h1>🌤 Počasíčko</h1>
+
+  <!-- Vyhledávací pole a tlačítko -->
+  <input id="inp" type="text" placeholder="Název města…"/>
+  <button id="btn">Hledat</button>
+
+  <!-- Stavová hláška: "Načítám…" nebo chybová zpráva -->
+  <p id="status"></p>
+
+  <!-- Výsledná karta – prázdná až do načtení dat -->
+  <div id="result">
+    <div class="top">
+      <h2 id="city"></h2>  <!-- Název města + kód země -->
+      <div class="temp">
+        <img id="icon" width="50" style="vertical-align:middle"/> <!-- Ikonka počasí z API -->
+        <span id="temp"></span> °C
+      </div>
+      <div class="desc" id="desc"></div> <!-- Textový popis, např. "zataženo" -->
+    </div>
+    <div class="stats">
+      <div class="stat">💧 Vlhkost<span id="humidity"></span></div>
+      <div class="stat">💨 Vítr<span id="wind"></span></div>
+      <div class="stat">🔵 Tlak<span id="pressure"></span></div>
+    </div>
+  </div>
+
+  <script>
+    // API klíč z OpenWeatherMap – každý student má svůj vlastní
+    const KEY = 'a3ece58856c71fb4f0a71e1d84bcf6c7';
+
+    // Výběr prvků z DOM, se kterými budeme pracovat
+    const inp    = document.getElementById('inp');
+    const btn    = document.getElementById('btn');
+    const status = document.getElementById('status');
+    const result = document.getElementById('result');
+
+    // Hlavní async funkce – stáhne data z API a zobrazí je
+    async function fetchWeather(city) {
+      // Reset UI před každým novým hledáním
+      status.className = '';
+      status.textContent = 'Načítám…';
+      result.style.display = 'none';
+
+      try {
+        // Sestavení URL – q = název města, units=metric = °C, lang=cs = český popis
+        const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&units=metric&lang=cs&appid=${KEY}`;
+
+        // Odeslání HTTP požadavku a čekání na odpověď
+        const res = await fetch(url);
+
+        // Pokud server vrátil chybu (404 = město nenalezeno), vyhodíme výjimku
+        if (!res.ok) throw new Error(res.status === 404 ? `Město „${city}" nenalezeno.` : `Chyba (${res.status})`);
+
+        // Převod JSON odpovědi na JS objekt
+        const d = await res.json();
+
+        // Vyplnění hodnot do HTML elementů
+        document.getElementById('city').textContent     = d.name + ', ' + d.sys.country;
+        document.getElementById('temp').textContent     = Math.round(d.main.temp);        // zaokrouhlení na celé °C
+        document.getElementById('desc').textContent     = d.weather[0].description;
+        document.getElementById('icon').src             = `https://openweathermap.org/img/wn/${d.weather[0].icon}.png`;
+        document.getElementById('humidity').textContent = d.main.humidity + ' %';
+        document.getElementById('wind').textContent     = Math.round(d.wind.speed * 3.6) + ' km/h'; // m/s → km/h
+        document.getElementById('pressure').textContent = d.main.pressure + ' hPa';
+
+        // Uložení posledního úspěšného města do localStorage (přežije reload stránky)
+        localStorage.setItem('lastCity', city);
+
+        // Zobrazení karty, vyčištění hlášky a inputu
+        status.textContent = '';
+        result.style.display = 'block';
+        inp.value = '';
+
+      } catch(e) {
+        // Při jakékoliv chybě zobrazíme červenou hlášku
+        status.className = 'error';
+        status.textContent = e.message;
+      }
+    }
+
+    // Kliknutí na tlačítko → spustí hledání (pokud input není prázdný)
+    btn.addEventListener('click', () => { const c = inp.value.trim(); if (c) fetchWeather(c); });
+
+    // Enter v inputu funguje stejně jako kliknutí na tlačítko
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') btn.click(); });
+
+    // Při načtení stránky automaticky načteme poslední hledané město (nebo Prahu)
+    fetchWeather(localStorage.getItem('lastCity') || 'Prague');
+  </script>
+</body>
+</html>
